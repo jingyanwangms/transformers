@@ -1,0 +1,62 @@
+diff --git a/src/transformers/models/gemma/modeling_gemma.py b/src/transformers/models/gemma/modeling_gemma.py
+index 165ef5a05..df5d5384d 100644
+--- a/src/transformers/models/gemma/modeling_gemma.py
++++ b/src/transformers/models/gemma/modeling_gemma.py
+@@ -885,6 +885,20 @@ class GemmaModel(GemmaPreTrainedModel):
+         all_self_attns = () if output_attentions else None
+         next_decoder_cache = None
+ 
++        # import inspect
++        # for cls in inspect.getmro(self.__class__):
++        #     print("#*#*#*", cls)
++        #     if '_gradient_checkpointing_func' in cls.__dict__:
++        #         print(f"Method _gradient_checkpointing_func is defined in: {cls.__name__}")
++        #         try:
++        #             source_file = inspect.getsourcefile(cls)
++        #             print(f"Source file: {source_file}")
++        #             lines, line_no = inspect.getsourcelines(getattr(cls, '_gradient_checkpointing_func'))
++        #             print(f"Method starts at line: {line_no}")
++        #             print("".join(lines))
++        #         except TypeError:
++        #             print("Could not find the source file.")
++
+         for decoder_layer in self.layers:
+             if output_hidden_states:
+                 all_hidden_states += (hidden_states,)
+diff --git a/src/transformers/trainer.py b/src/transformers/trainer.py
+index a2436dadc..52ce03f5d 100755
+--- a/src/transformers/trainer.py
++++ b/src/transformers/trainer.py
+@@ -1543,6 +1543,9 @@ class Trainer:
+             kwargs (`Dict[str, Any]`, *optional*):
+                 Additional keyword arguments used to hide deprecated arguments
+         """
++        # print("#*#*#", kwargs)
++        # print("#*#*#", self.model)
++        # print("#*#*#", self.args)
+         if resume_from_checkpoint is False:
+             resume_from_checkpoint = None
+ 
+@@ -1926,6 +1929,10 @@ class Trainer:
+ 
+             step = -1
+             for step, inputs in enumerate(epoch_iterator):
++                if step == 100:
++                    torch.cuda.cudart().cudaProfilerStart()
++                if step == 110:
++                    torch.cuda.cudart().cudaProfilerStop()
+                 total_batched_samples += 1
+ 
+                 if self.args.include_num_input_tokens_seen:
+@@ -4123,7 +4130,10 @@ class Trainer:
+                 # Some values may need to go through non-accelerate aligned defaults
+                 # and we need to run the `__post_init__` to set them
+                 accelerator_kwargs = AcceleratorConfig(**accelerator_kwargs).to_dict()
+-
++        # temp fix for TypeError: __init__() got an unexpected keyword argument 'use_seedable_sampler'
++        if 'use_seedable_sampler' in accelerator_kwargs:
++            del accelerator_kwargs['use_seedable_sampler'] 
++        # print("#*#*#*accelerator_kwargs=",accelerator_kwargs)
+         self.accelerator = Accelerator(
+             deepspeed_plugin=self.args.deepspeed_plugin,
+             gradient_accumulation_plugin=gradient_accumulation_plugin,
