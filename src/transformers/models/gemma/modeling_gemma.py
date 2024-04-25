@@ -97,31 +97,54 @@ ALL_LAYERNORM_LAYERS.append(GemmaRMSNorm)
 class GemmaRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
+        self.dim = dim  # Dimensionality of the embedding (typically, the model dimension or head dimension)
+        self.max_position_embeddings = max_position_embeddings  # Maximum number of position embeddings
+        self.base = base  # Base for positional encoding calculation
+        self.register_buffer("inv_freq", None, persistent=False)  # Non-persistent buffer for inverse frequencies
 
-        self.dim = dim
-        self.max_position_embeddings = max_position_embeddings
-        self.base = base
-        self.register_buffer("inv_freq", None, persistent=False)
-
-    @torch.no_grad()
+    @torch.no_grad()  # This annotation disables gradient calculations, reducing memory usage and increasing speed
     def forward(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
+        # bs: batch size, num_attention_heads: number of attention heads in the Transformer
+        # seq_len: length of the sequence, head_size: size of each attention head
+
         if self.inv_freq is None:
+            # Calculate the inverse frequency of the position embeddings if not already computed
             self.inv_freq = 1.0 / (
                 self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device=x.device).float() / self.dim)
             )
+            # inv_freq: [dim // 2]
+            # The inv_freq tensor will have size (dim // 2) since we are using steps of 2
+
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        # inv_freq_expanded: [bs, dim // 2, 1]
+        # Expand inv_freq to match the batch size and prepare for broadcasting in multiplication
+
         position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 since bfloat16 loses precision on long contexts
-        # See https://github.com/huggingface/transformers/pull/29285
+        # position_ids_expanded: [bs, 1, seq_len]
+        # Expand position_ids to prepare for broadcasting, matching dimensions for multiplication
+
+        # Set the device for computations to handle precision and potential device-specific optimizations
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+
+        # Disable autocast for the block of operations to ensure precision is maintained (especially important for large values)
         with torch.autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            # freqs: [bs, seq_len, dim // 2]
+            # Matrix multiplication followed by transpose to align dimensions for sinusoidal calculations
+
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
+            # emb: [bs, seq_len, dim]
+            # Concatenate frequencies to double the dimension, preparing for sine and cosine calculations
+
+            cos = emb.cos()  # Compute cosine for the concatenated frequencies
+            sin = emb.sin()  # Compute sine for the concatenated frequencies
+            # cos, sin: [bs, seq_len, dim]
+            # These tensors will hold the final cosine and sine values of the positional encodings
+
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        # Return cosine and sine embeddings casted to the original dtype of x, typically float32
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
@@ -129,6 +152,8 @@ def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
+    res = torch.cat((-x2, x1), dim=-1)
+    print("rotate_half res.shape = ", res.shape)
     return torch.cat((-x2, x1), dim=-1)
 
 
@@ -153,7 +178,16 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
+    # q.size = [bsz, num_heads, q_len, head_dim]
+    print(f"q.shape={q.shape} q={q}") # [1, 16, 256, 256]
+    print(f"k.shape={k.shape} k={k}")
+    print("cos.shape=", cos.shape) # [1, 256, 256]
+    # print("cos", cos)
+    print("sin.shape=", sin.shape)
+    # print("sin", sin)
+
     cos = cos.unsqueeze(unsqueeze_dim)
+    print("unsqueezed_cos.shape=", cos.shape)
     sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
@@ -241,13 +275,18 @@ class GemmaAttention(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        # hidden_states: expected tensor size [batch size (bsz), sequence length (q_len), feature dimension (hidden_size)]
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
+        # query_states: After linear transformation, the size is [bsz, q_len, num_heads * head_dim] 
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        # query_states.view: Changes the shape to [bsz, q_len, num_heads, head_dim]
+        # query_states.transpose: Swaps q_len and num_heads, resulting in [bsz, num_heads, q_len, head_dim]
+        # Final size of query_states is [bsz, num_heads, q_len, head_dim]
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 

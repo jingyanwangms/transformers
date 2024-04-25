@@ -34,6 +34,7 @@ import warnings
 from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+import nvtx
 
 
 # Integrations must be imported before ML frameworks:
@@ -1939,6 +1940,10 @@ class Trainer:
 
             step = -1
             for step, inputs in enumerate(epoch_iterator):
+                if step == 0:
+                    torch.cuda.cudart().cudaProfilerStart()
+                if step == 5:
+                    torch.cuda.cudart().cudaProfilerStop()
                 total_batched_samples += 1
 
                 if self.args.include_num_input_tokens_seen:
@@ -2030,17 +2035,18 @@ class Trainer:
                             grad_norm = _grad_norm
 
                     # Optimizer step
-                    self.optimizer.step()
-                    optimizer_was_run = not self.accelerator.optimizer_step_was_skipped
-                    if optimizer_was_run:
-                        # Delay optimizer scheduling until metrics are generated
-                        if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                            self.lr_scheduler.step()
+                    with nvtx.annotate("optimizer", color="blue"):
+                        self.optimizer.step()
+                        optimizer_was_run = not self.accelerator.optimizer_step_was_skipped
+                        if optimizer_was_run:
+                            # Delay optimizer scheduling until metrics are generated
+                            if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                                self.lr_scheduler.step()
 
-                    model.zero_grad()
-                    self.state.global_step += 1
-                    self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
-                    self.control = self.callback_handler.on_step_end(args, self.state, self.control)
+                        model.zero_grad()
+                        self.state.global_step += 1
+                        self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
+                        self.control = self.callback_handler.on_step_end(args, self.state, self.control)
 
                     self._maybe_log_save_evaluate(tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval)
                 else:
@@ -2877,7 +2883,8 @@ class Trainer:
         Return:
             `torch.Tensor`: The tensor with training loss on this batch.
         """
-        model.train()
+        with nvtx.annotate("train", color="green"):
+            model.train()
         inputs = self._prepare_inputs(inputs)
 
         if is_sagemaker_mp_enabled():
@@ -2889,12 +2896,12 @@ class Trainer:
 
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
-
-        if self.use_apex:
-            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
-                scaled_loss.backward()
-        else:
-            self.accelerator.backward(loss)
+        with nvtx.annotate("backward", color="red"):
+            if self.use_apex:
+                with amp.scale_loss(loss, self.optimizer) as scaled_loss:
+                    scaled_loss.backward()
+            else:
+                self.accelerator.backward(loss)
 
         return loss.detach() / self.args.gradient_accumulation_steps
 
@@ -3392,6 +3399,7 @@ class Trainer:
         observed_num_examples = 0
         # Main evaluation loop
         for step, inputs in enumerate(dataloader):
+            # print("#*#*# input.shape=", input.shape) #[8, 1024]
             # Update the observed num examples
             observed_batch_size = find_batch_size(inputs)
             if observed_batch_size is not None:
@@ -4097,12 +4105,14 @@ class Trainer:
         grad_acc_kwargs = {"num_steps": self.args.gradient_accumulation_steps}
         grad_acc_kwargs["sync_with_dataloader"] = False
         gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
-
+        acc_config_dict = self.args.accelerator_config.to_dict()
+        if 'use_seedable_sampler' in acc_config_dict:
+            del acc_config_dict['use_seedable_sampler']
         # create accelerator object
         self.accelerator = Accelerator(
             deepspeed_plugin=self.args.deepspeed_plugin,
             gradient_accumulation_plugin=gradient_accumulation_plugin,
-            **self.args.accelerator_config.to_dict(),
+            **acc_config_dict,
         )
         # some Trainer classes need to use `gather` instead of `gather_for_metrics`, thus we store a flag
         self.gather_function = self.accelerator.gather_for_metrics

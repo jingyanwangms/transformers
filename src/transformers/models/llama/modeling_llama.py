@@ -959,6 +959,7 @@ class LlamaModel(LlamaPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
+        print("#*#*#* input_ids.shape=", input_ids.shape)
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1116,7 +1117,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         super().__init__(config)
         self.model = LlamaModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False) # [4096, 32000]
 
         # Initialize weights and apply final processing
         self.post_init()
