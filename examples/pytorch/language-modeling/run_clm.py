@@ -439,8 +439,8 @@ def main():
             "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
-    print("#*#*#* Overriding config.num_hidden_layers=1")
-    config.num_hidden_layers = 1
+    # print("#*#*#* Overriding config.num_hidden_layers=1")
+    # config.num_hidden_layers = 1
 
     if model_args.model_name_or_path:
         torch_dtype = (
@@ -702,23 +702,23 @@ def print_env_info():
     import subprocess
     import torch.distributed as dist
 
-    # if dist.get_rank() == 0:
-    print("\n\n===== Environment Info =====")
-    print("Docker: mcr.microsoft.com/aifx/acpt/stable-ubuntu2004-cu118-py310-torch222")
-    env_variable_sh = "printenv | grep 'ORTMODULE_\|APPLY_' "
-    print("\n", env_variable_sh)
-    subprocess.run(env_variable_sh, shell=True)
-    package_ver_sh = "pip list | grep 'transformers\|optimum\|onnx\|torch\|accelerate'"
-    print("\n", package_ver_sh)
-    subprocess.run(package_ver_sh, shell=True)
-    optimum_commit = "cd ../optimum && git show --oneline -s"
-    print("\n optimum commit")
-    subprocess.run(optimum_commit, shell=True)
-    transformers_commit = "cd ../transformers && git show --oneline -s"
-    print("\n transfromers commit")
-    subprocess.run(transformers_commit, shell=True)
-    print("=======================================")
+    if dist.get_rank() == 0:
+        print("\n\n===== Environment Info =====")
+        print("Docker: mcr.microsoft.com/aifx/acpt/stable-ubuntu2004-cu118-py310-torch222")
+        env_variable_sh = "printenv | grep 'ORTMODULE_\|APPLY_' "
+        print("\n", env_variable_sh)
+        subprocess.run(env_variable_sh, shell=True)
+        package_ver_sh = "pip list | grep 'transformers\|optimum\|onnx\|torch\|accelerate'"
+        print("\n", package_ver_sh)
+        subprocess.run(package_ver_sh, shell=True)
+        optimum_commit = "cd ../optimum && git show --oneline -s"
+        print("\n optimum commit")
+        subprocess.run(optimum_commit, shell=True)
+        transformers_commit = "cd ../transformers && git show --oneline -s"
+        print("\n transfromers commit")
+        subprocess.run(transformers_commit, shell=True)
+        print("=======================================")
 
 if __name__ == "__main__":
-    # main()
+    main()
     print_env_info()
