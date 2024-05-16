@@ -245,7 +245,6 @@ class DataTrainingArguments:
 def main():
     apply_ort = os.getenv("APPLY_ORT", "").lower() == "true"
     apply_4bit = os.getenv("APPLY_4BIT", "").lower() == "true"
-    apply_lora = os.getenv("APPLY_LORA", "").lower() == "true"
     apply_tc = os.getenv("ORTMODULE_USE_TRITON", "").lower() == "true"
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
@@ -478,10 +477,22 @@ def main():
     elif "mistral" in model_args.model_name_or_path.lower():
         target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "lm_head"]
     elif "phi" in model_args.model_name_or_path.lower():
-        target_modules = ["Wqkv", "out_proj", "fc1", "fc2", "linear"]
-        # target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
+        # target_modules = ["Wqkv", "out_proj", "fc1", "fc2", "linear"]
+        target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
     else:
         target_modules = None
+    
+    peft_config = LoraConfig(
+        task_type=TaskType.CAUSAL_LM,
+        inference_mode=False,
+        r=8,
+        lora_alpha=32,
+        lora_dropout=0.1,
+        target_modules=target_modules
+    )
+    if apply_4bit is True:
+        model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=False)
+    model = get_peft_model(model, peft_config)
 
     # Preprocessing the datasets.
     # First we tokenize all the texts.
