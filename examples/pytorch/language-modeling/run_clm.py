@@ -243,11 +243,20 @@ class DataTrainingArguments:
 
 
 def main():
+    apply_ort = os.getenv("APPLY_ORT", "").lower() == "true"
+    apply_4bit = os.getenv("APPLY_4BIT", "").lower() == "true"
+    apply_lora = os.getenv("APPLY_LORA", "").lower() == "true"
+    apply_tc = os.getenv("ORTMODULE_USE_TRITON", "").lower() == "true"
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    if apply_ort:
+        from optimum.onnxruntime import ORTTrainingArguments
+        parser = HfArgumentParser((ModelArguments, DataTrainingArguments, ORTTrainingArguments))
+    else:
+        parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
@@ -430,6 +439,8 @@ def main():
             "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
+    print("#*#*#* Overriding config.num_hidden_layers=1")
+    config.num_hidden_layers = 1
 
     if model_args.model_name_or_path:
         torch_dtype = (
@@ -458,6 +469,19 @@ def main():
     embedding_size = model.get_input_embeddings().weight.shape[0]
     if len(tokenizer) > embedding_size:
         model.resize_token_embeddings(len(tokenizer))
+    
+    # Use LoRA performance efficient fine tuning
+    from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
+
+    if "llama" in model_args.model_name_or_path.lower():
+        target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
+    elif "mistral" in model_args.model_name_or_path.lower():
+        target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "lm_head"]
+    elif "phi" in model_args.model_name_or_path.lower():
+        target_modules = ["Wqkv", "out_proj", "fc1", "fc2", "linear"]
+        # target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
+    else:
+        target_modules = None
 
     # Preprocessing the datasets.
     # First we tokenize all the texts.
@@ -593,8 +617,17 @@ def main():
             preds = preds[:, :-1].reshape(-1)
             return metric.compute(predictions=preds, references=labels)
 
+    if apply_ort:
+        from optimum.onnxruntime import ORTTrainer
+        trainer_cls = ORTTrainer
+    else:
+        trainer_cls = Trainer
+
+    if apply_tc:
+        model = torch.compile(model)
+
     # Initialize our Trainer
-    trainer = Trainer(
+    trainer = trainer_cls(
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
@@ -665,6 +698,27 @@ def _mp_fn(index):
     # For xla_spawn (TPUs)
     main()
 
+def print_env_info():
+    import subprocess
+    import torch.distributed as dist
+
+    # if dist.get_rank() == 0:
+    print("\n\n===== Environment Info =====")
+    print("Docker: mcr.microsoft.com/aifx/acpt/stable-ubuntu2004-cu118-py310-torch222")
+    env_variable_sh = "printenv | grep 'ORTMODULE_\|APPLY_' "
+    print("\n", env_variable_sh)
+    subprocess.run(env_variable_sh, shell=True)
+    package_ver_sh = "pip list | grep 'transformers\|optimum\|onnx\|torch\|accelerate'"
+    print("\n", package_ver_sh)
+    subprocess.run(package_ver_sh, shell=True)
+    optimum_commit = "cd ../optimum && git show --oneline -s"
+    print("\n optimum commit")
+    subprocess.run(optimum_commit, shell=True)
+    transformers_commit = "cd ../transformers && git show --oneline -s"
+    print("\n transfromers commit")
+    subprocess.run(transformers_commit, shell=True)
+    print("=======================================")
 
 if __name__ == "__main__":
-    main()
+    # main()
+    print_env_info()
