@@ -245,7 +245,7 @@ class DataTrainingArguments:
 def main():
     apply_ort = os.getenv("APPLY_ORT", "").lower() == "true"
     apply_4bit = os.getenv("APPLY_4BIT", "").lower() == "true"
-    apply_tc = os.getenv("ORTMODULE_USE_TRITON", "").lower() == "true"
+    apply_tc = os.getenv("APPLY_TORCH_COMPILE", "").lower() == "true"
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
@@ -493,10 +493,10 @@ def main():
     if apply_4bit is True:
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=False)
 
-    if dist.get_rank() == 0:
+    if training_args.local_rank == 0:
         print("#*#*#* model before LoRA", model)
     model = get_peft_model(model, peft_config)
-    if dist.get_rank() == 0:
+    if training_args.local_rank == 0:
         print("#*#*#* model after LoRA", model)
 
     # Preprocessing the datasets.
@@ -719,7 +719,8 @@ def print_env_info():
 
     if dist.get_rank() == 0:
         print("\n\n===== Environment Info =====")
-        print("Docker: mcr.microsoft.com/aifx/acpt/stable-ubuntu2004-cu118-py310-torch222")
+        docker_sh = "echo Docker:$HOST_HOSTNAME"
+        subprocess.run(docker_sh, shell=True)
         env_variable_sh = "printenv | grep 'ORTMODULE_\|APPLY_' "
         print("\n", env_variable_sh)
         subprocess.run(env_variable_sh, shell=True)
