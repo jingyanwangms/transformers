@@ -478,7 +478,9 @@ def main():
         target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "lm_head"]
     elif "phi" in model_args.model_name_or_path.lower():
         # target_modules = ["Wqkv", "out_proj", "fc1", "fc2", "linear"]
-        target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
+        # target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
+        target_modules = ["qkv_proj"]
+        # target_modules = ["qkv_proj", "o_proj", "gate_up_proj", "down_proj"]
     else:
         target_modules = None
     
