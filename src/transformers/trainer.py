@@ -2181,8 +2181,8 @@ class Trainer:
                 for step, inputs in enumerate(epoch_iterator):
                     with nvtx.annotate(f"step {step}", color="orange"):
                         # Only profile first 10 steps in each epoch
-                        # if step == 10:
-                        #     break
+                        if step == 10:
+                            torch.cuda.cudart().cudaProfilerStop()
                         total_batched_samples += 1
 
                         if self.args.include_num_input_tokens_seen:
@@ -2330,9 +2330,7 @@ class Trainer:
                         )
                 if self.control.should_training_stop:
                     break
-                torch.cuda.synchronize()
-        
-        torch.cuda.cudart().cudaProfilerStop()
+                # torch.cuda.synchronize()
 
         if args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of training
