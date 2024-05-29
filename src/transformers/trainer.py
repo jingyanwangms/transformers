@@ -2183,6 +2183,7 @@ class Trainer:
                         # Only profile first 10 steps in each epoch
                         if step == 10:
                             torch.cuda.cudart().cudaProfilerStop()
+                            break
                         total_batched_samples += 1
 
                         if self.args.include_num_input_tokens_seen:
@@ -3273,6 +3274,7 @@ class Trainer:
             labels = inputs.pop("labels")
         else:
             labels = None
+        print(inputs)
         outputs = model(**inputs)
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
