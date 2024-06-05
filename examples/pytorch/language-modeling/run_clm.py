@@ -495,11 +495,11 @@ def main():
     if apply_4bit is True:
         model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=False)
 
-    if training_args.local_rank == 0:
-        print("#*#*#* model before LoRA", model)
+    # if training_args.local_rank == 0:
+    #     print("#*#*#* model before LoRA", model)
     model = get_peft_model(model, peft_config)
-    if training_args.local_rank == 0:
-        print("#*#*#* model after LoRA", model)
+    # if training_args.local_rank == 0:
+    #     print("#*#*#* model after LoRA", model)
 
     # Preprocessing the datasets.
     # First we tokenize all the texts.

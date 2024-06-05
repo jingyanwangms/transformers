@@ -2183,7 +2183,16 @@ class Trainer:
                         # Only profile first 10 steps in each epoch
                         if step == 10:
                             torch.cuda.cudart().cudaProfilerStop()
-                            break
+                            # break
+                        # print(f"self.args.local_rank={self.args.local_rank} inputs['input_ids'].size()={inputs['input_ids'].size()} attention_mask.size()={inputs['attention_mask'].size()} labels.size()={inputs['labels'].size()}")
+                        # inputs['input_ids'] = torch.zeros(1, 2048, dtype=torch.int64)
+                        # inputs['attention_mask'] = torch.ones(1, 2048, dtype=torch.int64)
+                        # inputs['labels'] = torch.zeros(1, 2048, dtype=torch.int64)
+                        # if self.args.local_rank == 0 and step % 10 == 0:
+                            # print(f"inputs['input_ids'].size()={inputs['input_ids'].size()} attention_mask.size()={inputs['attention_mask'].size()} labels.size()={inputs['labels'].size()}")
+                            # print(inputs['input_ids'])
+                            # print(inputs['input_ids'].dtype)
+                        # print(f"inputs['input_ids'].size()={inputs['input_ids'].size()} attention_mask.size()={inputs['attention_mask'].size()} labels.size()={inputs['labels'].size()}")
                         total_batched_samples += 1
 
                         if self.args.include_num_input_tokens_seen:
@@ -3274,7 +3283,6 @@ class Trainer:
             labels = inputs.pop("labels")
         else:
             labels = None
-        print(inputs)
         outputs = model(**inputs)
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
