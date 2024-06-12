@@ -570,6 +570,7 @@ class Trainer:
             )
         default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
         callbacks = default_callbacks if callbacks is None else default_callbacks + callbacks
+        # print("#*#*#", callbacks)
         self.callback_handler = CallbackHandler(
             callbacks, self.model, self.tokenizer, self.optimizer, self.lr_scheduler
         )
@@ -2148,7 +2149,7 @@ class Trainer:
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
 
         total_batched_samples = 0
-        torch.cuda.cudart().cudaProfilerStart()
+        # torch.cuda.cudart().cudaProfilerStart()
         for epoch in range(epochs_trained, num_train_epochs):
             with nvtx.annotate(f"epoch {epoch}", color="green"):
                 epoch_iterator = train_dataloader
@@ -2181,7 +2182,7 @@ class Trainer:
                 for step, inputs in enumerate(epoch_iterator):
                     with nvtx.annotate(f"step {step}", color="orange"):
                         # Only profile first 10 steps in each epoch
-                        if step == 10:
+                        # if step == 10:
                             # torch.cuda.cudart().cudaProfilerStop()
                             # break
                         # print(f"self.args.local_rank={self.args.local_rank} inputs['input_ids'].size()={inputs['input_ids'].size()} attention_mask.size()={inputs['attention_mask'].size()} labels.size()={inputs['labels'].size()}")
@@ -2323,8 +2324,10 @@ class Trainer:
                         if step == 0:
                             start_time = time.time()
                             torch.cuda.cudart().cudaProfilerStart()
+                            nvtx.range_push("10 steps")
                         if step == 10:
                             end_time = time.time()
+                            nvtx.range_pop()
                             torch.cuda.cudart().cudaProfilerStop()
                             # Calculate elapsed time
                             elapsed_time = end_time - start_time
@@ -3273,7 +3276,7 @@ class Trainer:
                 loss = self.compute_loss(model, inputs)
 
             del inputs
-            torch.cuda.empty_cache()
+            # torch.cuda.empty_cache()
 
             if self.args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
