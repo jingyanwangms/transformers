@@ -2324,10 +2324,8 @@ class Trainer:
                         if step == 0:
                             start_time = time.time()
                             torch.cuda.cudart().cudaProfilerStart()
-                            nvtx.range_push("10 steps")
                         if step == 10:
                             end_time = time.time()
-                            nvtx.range_pop()
                             torch.cuda.cudart().cudaProfilerStop()
                             # Calculate elapsed time
                             elapsed_time = end_time - start_time
